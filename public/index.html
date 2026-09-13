@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>THAHOOK · Sinh viên</title>
+  <link rel="stylesheet" href="style.css?v=10">
+</head>
+<body>
+  <button id="pMute" style="position:fixed;top:8px;right:8px;z-index:50;background:rgba(255,255,255,.25);color:#fff;border:none;padding:6px 11px;border-radius:8px;font-size:14px;cursor:pointer">🔊</button>
+  <div class="wrap">
+    <!-- Man hinh nhap PIN -->
+    <div id="joinView" class="card">
+      <div class="brand-logo">THA<span class="hk">HOOK</span></div>
+      <p class="sub">Ôn tập kiến thức · Trường Đại học Gia Định</p>
+      <input id="pinInput" type="text" inputmode="numeric" maxlength="6" placeholder="Nhập mã PIN">
+      <input id="nameInput" type="text" maxlength="20" placeholder="Nhập tên của bạn">
+      <button id="joinBtn" class="btn-primary">Tham gia</button>
+      <p id="joinErr" class="tiny" style="color:#FF9BA6"></p>
+      <p class="tiny">Giáo viên? <a class="link" href="host.html">Mở màn hình điều khiển</a></p>
+    </div>
+
+    <!-- Cho bat dau -->
+    <div id="lobbyView" class="card hidden">
+      <h1>✅ Đã vào phòng!</h1>
+      <p class="sub">Xin chào, <b id="myName"></b></p>
+      <p class="status-big">Đang chờ giáo viên bắt đầu…</p>
+    </div>
+
+    <!-- Tra loi -->
+    <div id="playView" class="hidden" style="width:100%;display:flex;flex-direction:column;align-items:center">
+      <p class="status-big" style="margin-bottom:6px">Câu <b id="pQIdx"></b></p>
+      <div id="pQuestion" class="pquestion"></div>
+      <div class="pgrid">
+        <button class="pbtn a" data-opt="0"><span class="psym">▲</span><span class="ptext"></span></button>
+        <button class="pbtn b" data-opt="1"><span class="psym">◆</span><span class="ptext"></span></button>
+        <button class="pbtn c" data-opt="2"><span class="psym">●</span><span class="ptext"></span></button>
+        <button class="pbtn d" data-opt="3"><span class="psym">■</span><span class="ptext"></span></button>
+      </div>
+    </div>
+
+    <!-- Da tra loi, cho ket qua -->
+    <div id="waitView" class="card hidden">
+      <p class="status-big">Đã ghi nhận đáp án!</p>
+      <p class="sub">Chờ các bạn khác…</p>
+    </div>
+
+    <!-- Ket qua tung cau -->
+    <div id="resultView" class="card hidden">
+      <p id="rMsg" class="status-big"></p>
+      <p id="rGain" class="sub"></p>
+      <p>Điểm: <b id="rScore"></b></p>
+      <p>Hạng: <b id="rRank"></b></p>
+    </div>
+
+    <!-- Ket thuc -->
+    <div id="endView" class="card hidden">
+      <h1>🎉 Kết thúc!</h1>
+      <p class="status-big" id="endRank"></p>
+      <p>Tổng điểm: <b id="endScore"></b></p>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="sfx.js?v=10"></script>
+  <script src="play.js?v=10"></script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>THAHOOK · Giáo viên</title>
+  <link rel="stylesheet" href="style.css?v=10">
+</head>
+<body>
+  <div id="audioBar" style="position:fixed;top:10px;right:12px;z-index:50;display:flex;gap:8px">
+    <button id="toggleMusic" class="btn-ghost" style="padding:8px 12px;font-size:13px">🎵 Nhạc nền: Bật</button>
+    <button id="toggleSfx" class="btn-ghost" style="padding:8px 12px;font-size:13px">🔊 Hiệu ứng: Bật</button>
+  </div>
+  <div class="wrap">
+
+    <!-- SETUP: soan cau hoi + tao phong -->
+    <div id="setupView" style="width:100%;max-width:820px">
+      <div class="card" style="max-width:820px">
+        <div class="brand-logo">THA<span class="hk">HOOK</span></div>
+        <p class="sub">Màn hình giáo viên · Soạn/nhập câu hỏi rồi tạo phòng cho sinh viên</p>
+        <button id="createBtn" class="btn-primary">🚀 Tạo phòng với ngân hàng câu hỏi bên dưới</button>
+      </div>
+
+      <div class="editor">
+        <div class="toolbar">
+          <button class="btn-ghost" id="loadDefault">Tải bộ câu hỏi mẫu</button>
+          <button class="btn-ghost" id="xlsxTemplateBtn">📥 Tải mẫu Excel</button>
+          <button class="btn-ghost" id="importBtn">📂 Nhập file (Excel/CSV/JSON)</button>
+          <button class="btn-ghost" id="exportXlsxBankBtn">📊 Xuất ra Excel</button>
+          <button class="btn-ghost" id="exportJsonBtn">Xuất JSON</button>
+          <input type="file" id="fileInput" class="hidden" accept=".xlsx,.xls,.csv,.json">
+        </div>
+
+        <h3 style="margin-bottom:8px">Thêm câu hỏi</h3>
+        <input type="text" id="qText" placeholder="Nội dung câu hỏi">
+        <div class="opt-row"><input type="radio" name="correct" value="0" checked><input type="text" id="opt0" placeholder="Đáp án ▲ (A)"></div>
+        <div class="opt-row"><input type="radio" name="correct" value="1"><input type="text" id="opt1" placeholder="Đáp án ◆ (B)"></div>
+        <div class="opt-row"><input type="radio" name="correct" value="2"><input type="text" id="opt2" placeholder="Đáp án ● (C) — có thể bỏ trống"></div>
+        <div class="opt-row"><input type="radio" name="correct" value="3"><input type="text" id="opt3" placeholder="Đáp án ■ (D) — có thể bỏ trống"></div>
+        <div class="opt-row" style="gap:12px">
+          <span>Thời gian (giây):</span>
+          <input type="number" id="qTime" value="20" min="5" max="120" style="width:90px;margin:0">
+          <span style="font-size:13px;color:#666">Chọn nút tròn bên trái để đánh dấu đáp án ĐÚNG</span>
+        </div>
+        <button class="btn-primary" id="addBtn" style="margin-top:8px">+ Thêm vào ngân hàng</button>
+
+        <h3 style="margin:16px 0 8px">Ngân hàng câu hỏi (<span id="qCount">0</span>)</h3>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+          <span style="font-size:14px;color:#444">Đặt thời gian cho <b>tất cả</b> câu:</span>
+          <input type="number" id="bulkTime" value="20" min="5" max="300" style="width:80px;margin:0;padding:8px">
+          <span style="font-size:14px;color:#444">giây</span>
+          <button class="btn-ghost" id="bulkApply" style="padding:8px 14px">Áp dụng</button>
+        </div>
+        <div id="qList"></div>
+      </div>
+    </div>
+
+    <!-- LOBBY -->
+    <div id="lobbyView" class="hidden qwrap" style="text-align:center">
+      <div class="brand-logo light small">THA<span class="hk">HOOK</span></div>
+      <h1>Sinh viên tham gia tại:</h1>
+      <div class="join-url" id="joinUrl"></div>
+      <div style="margin:16px 0">
+        <div class="pin-box"><div class="label">Mã PIN</div><div class="pin" id="pinShow"></div></div>
+        <div class="qr" id="qrBox"></div>
+      </div>
+      <div><span class="count-badge">👥 <span id="playerCount">0</span> sinh viên</span></div>
+      <div class="players" id="playerChips"></div>
+      <button class="btn-primary" id="startBtn" style="max-width:320px;margin:22px auto 0" disabled>Bắt đầu</button>
+    </div>
+
+    <!-- QUESTION -->
+    <div id="questionView" class="hidden qwrap">
+      <div class="qmeta">
+        <span>Câu <span id="qNum"></span></span>
+        <span class="timer" id="timer"></span>
+        <span>Đã trả lời: <span id="answeredCount">0</span>/<span id="answeredTotal">0</span></span>
+      </div>
+      <div class="qtext" id="qDisplay"></div>
+      <div class="answers-grid" id="ansGrid"></div>
+      <button class="btn-ghost" id="revealBtn" style="max-width:260px;margin:16px auto 0">Hiện đáp án ngay</button>
+    </div>
+
+    <!-- REVEAL -->
+    <div id="revealView" class="hidden qwrap" style="text-align:center">
+      <h1 style="margin-bottom:14px">Kết quả câu <span id="rNum"></span></h1>
+      <div class="answers-grid" id="revealGrid" style="max-width:1000px;margin:0 auto 20px"></div>
+      <h3 style="margin-bottom:8px">Bảng xếp hạng</h3>
+      <div class="board" id="miniBoard"></div>
+      <button class="btn-primary" id="nextBtn" style="max-width:320px;margin:20px auto 0">Câu tiếp theo</button>
+    </div>
+
+    <!-- END -->
+    <div id="endView" class="hidden qwrap" style="text-align:center; max-width:900px">
+      <h1 style="margin-bottom:10px">🏆 Vinh danh</h1>
+      <div class="podium3" id="podium3">
+        <div class="pcol" data-slot="2">
+          <div class="pcap"><div class="pmedal">🥈</div><div class="pname"></div><div class="pscore"></div></div>
+          <div class="pbar silver"><span class="prank">2</span></div>
+        </div>
+        <div class="pcol" data-slot="1">
+          <div class="pcap"><div class="pmedal">🥇</div><div class="pname"></div><div class="pscore"></div></div>
+          <div class="pbar gold"><span class="prank">1</span></div>
+        </div>
+        <div class="pcol" data-slot="3">
+          <div class="pcap"><div class="pmedal">🥉</div><div class="pname"></div><div class="pscore"></div></div>
+          <div class="pbar bronze"><span class="prank">3</span></div>
+        </div>
+      </div>
+      <div id="endExtra" style="opacity:0; transition:opacity .6s">
+        <h3 style="margin:6px 0 8px">Bảng xếp hạng đầy đủ (<span id="finalCount">0</span> người chơi)</h3>
+        <div class="board" id="finalBoard" style="max-width:640px;max-height:44vh;overflow-y:auto;margin:0 auto"></div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:20px">
+          <button class="btn-primary" id="exportXlsxBtn" style="max-width:320px">📊 Tải kết quả ra Excel</button>
+          <button class="btn-ghost" id="againBtn" style="max-width:220px">Chơi lại từ đầu</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="vendor/xlsx.full.min.js"></script>
+  <script src="sfx.js?v=10"></script>
+  <script src="music.js?v=10"></script>
+  <script src="host.js?v=10"></script>
+</body>
+</html>

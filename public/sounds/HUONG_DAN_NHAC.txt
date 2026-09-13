@@ -1,0 +1,26 @@
+========================================
+   NHẠC NỀN CHO THAHOOK
+========================================
+
+Chép các file nhạc (.mp3) vào ĐÚNG thư mục này (public/sounds/) với tên:
+
+   lobby.mp3      → nhạc phát ở phòng chờ (trước khi bắt đầu)
+   question.mp3   → nhạc phát trong lúc sinh viên làm bài
+   win.mp3        → nhạc sôi động ở màn VINH DANH cuối (giải Ba/Nhì/Nhất)
+
+Nếu không có file, ứng dụng vẫn chạy bình thường (chỉ là không có nhạc nền).
+Bật/tắt nhạc bằng nút "🎵 Nhạc nền" trên màn hình giáo viên.
+
+--------------------------------------------------
+GỢI Ý NGUỒN NHẠC MIỄN PHÍ BẢN QUYỀN (dùng cho dạy học)
+--------------------------------------------------
+Nên dùng nhạc "royalty-free" để tránh vi phạm bản quyền khi phát trong lớp:
+
+  - Pixabay Music        : pixabay.com/music
+  - YouTube Audio Library: youtube.com/audiolibrary
+  - Incompetech          : incompetech.com
+  - Free Music Archive   : freemusicarchive.org
+
+Chọn nhạc vui, nhịp nhàng, không lời để không làm sinh viên mất tập trung.
+
+Mẹo: đổi tên file tải về thành lobby.mp3 / question.mp3 rồi bỏ vào đây là xong.
