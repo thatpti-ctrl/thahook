@@ -1,0 +1,32 @@
+[
+  {
+    "question": "Trong Incoterms 2020, điều kiện nào người bán chịu chi phí và rủi ro cao nhất?",
+    "options": ["EXW", "FOB", "CIF", "DDP"],
+    "answer": 3,
+    "time": 20
+  },
+  {
+    "question": "Tổ chức nào điều tiết thương mại toàn cầu và giải quyết tranh chấp giữa các quốc gia thành viên?",
+    "options": ["IMF", "WTO", "World Bank", "OECD"],
+    "answer": 1,
+    "time": 20
+  },
+  {
+    "question": "Lợi thế so sánh (comparative advantage) là lý thuyết gắn với nhà kinh tế nào?",
+    "options": ["Adam Smith", "David Ricardo", "John M. Keynes", "Michael Porter"],
+    "answer": 1,
+    "time": 20
+  },
+  {
+    "question": "Phương thức thanh toán quốc tế nào an toàn nhất cho người XUẤT KHẨU?",
+    "options": ["Ghi sổ (Open Account)", "Nhờ thu (Collection)", "Tín dụng chứng từ (L/C)", "Ứng trước một phần"],
+    "answer": 2,
+    "time": 25
+  },
+  {
+    "question": "FDI là viết tắt của khái niệm nào?",
+    "options": ["Đầu tư trực tiếp nước ngoài", "Đầu tư gián tiếp nước ngoài", "Quỹ phát triển quốc tế", "Chỉ số phát triển tài chính"],
+    "answer": 0,
+    "time": 15
+  }
+]
