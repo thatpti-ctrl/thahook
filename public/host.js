@@ -330,6 +330,8 @@ function setupLobby(res) {
   // QR (hien khi may co Internet; neu khong van dung URL + PIN)
   const qr = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(joinUrl)}`;
   document.getElementById('qrBox').innerHTML = `<img src="${qr}" alt="QR" width="200" height="200" onerror="this.parentNode.style.display='none'">`;
+  // Dong nho hien PIN + dia chi trong suot luc choi
+  document.getElementById('pinBadge').textContent = 'PIN ' + res.pin + ' · ' + base.replace(/^https?:\/\//, '');
 }
 
 socket.on('host:players', (d) => {
@@ -343,6 +345,7 @@ document.getElementById('startBtn').addEventListener('click', () => socket.emit(
 
 // ================= CAU HOI =================
 socket.on('game:question', (q) => {
+  document.getElementById('pinBadge').style.display = 'block';
   document.getElementById('qNum').textContent = `${q.index + 1}/${q.total}`;
   document.getElementById('qDisplay').textContent = q.question;
   document.getElementById('answeredCount').textContent = '0';
@@ -476,6 +479,7 @@ function revealPodium(slot, data, barHeight, isFirst) {
 socket.on('game:end', (d) => {
   lastResults = d.leaderboard || [];
   const board = lastResults;
+  document.getElementById('pinBadge').style.display = 'none';
 
   // Reset buc ve trang thai ban dau (de chay lai co the hien lai hieu ung)
   document.querySelectorAll('.pcol').forEach((c) => {

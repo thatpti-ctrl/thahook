@@ -4,9 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>THAHOOK · Giáo viên</title>
-  <link rel="stylesheet" href="style.css?v=11">
+  <link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
+  <div id="pinBadge" style="position:fixed;top:10px;left:12px;z-index:50;display:none;background:rgba(255,255,255,.18);color:#fff;font-weight:700;padding:8px 14px;border-radius:20px;font-size:15px">PIN</div>
   <div id="audioBar" style="position:fixed;top:10px;right:12px;z-index:50;display:flex;gap:8px">
     <button id="toggleMusic" class="btn-ghost" style="padding:8px 12px;font-size:13px">🎵 Nhạc nền: Bật</button>
     <button id="toggleSfx" class="btn-ghost" style="padding:8px 12px;font-size:13px">🔊 Hiệu ứng: Bật</button>
@@ -121,8 +122,8 @@
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="vendor/xlsx.full.min.js"></script>
-  <script src="sfx.js?v=11"></script>
-  <script src="music.js?v=11"></script>
-  <script src="host.js?v=11"></script>
+  <script src="sfx.js?v=12"></script>
+  <script src="music.js?v=12"></script>
+  <script src="host.js?v=12"></script>
 </body>
 </html>
