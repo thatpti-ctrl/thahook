@@ -42,6 +42,9 @@ function join() {
     }
     myName = res.name;
     document.getElementById('myName').textContent = myName;
+    document.getElementById('lobbyMsg').textContent = res.inProgress
+      ? 'Trò chơi đang diễn ra — chờ câu hỏi tiếp theo…'
+      : 'Đang chờ giáo viên bắt đầu…';
     SFX.join();
     show('lobby');
   });

@@ -97,8 +97,8 @@ io.on('connection', (socket) => {
     const { pin, name } = payload || {};
     const room = rooms[pin];
     if (!room) return cb && cb({ ok: false, error: 'Ma PIN khong ton tai.' });
-    if (room.state !== 'lobby')
-      return cb && cb({ ok: false, error: 'Tro choi da bat dau, khong the vao.' });
+    if (room.state === 'ended')
+      return cb && cb({ ok: false, error: 'Tro choi da ket thuc.' });
 
     const cleanName = String(name || '').trim().slice(0, 20);
     if (!cleanName) return cb && cb({ ok: false, error: 'Vui long nhap ten.' });
@@ -113,7 +113,8 @@ io.on('connection', (socket) => {
     socket.join(pin);
     socket.data.pin = pin;
     socket.data.role = 'player';
-    if (cb) cb({ ok: true, name: cleanName });
+    // Vao giua chung (khi tro choi dang dien ra) -> cho tu cau hoi ke tiep
+    if (cb) cb({ ok: true, name: cleanName, inProgress: room.state !== 'lobby' });
 
     io.to(room.hostId).emit('host:players', {
       count: Object.keys(room.players).length,
@@ -152,6 +153,7 @@ io.on('connection', (socket) => {
     if (!room || room.state !== 'question') return;
     const player = room.players[socket.id];
     if (!player || player.answered) return;
+    if (!room.participants || room.participants.indexOf(socket.id) < 0) return; // nguoi vao muon: doi cau sau
 
     const q = room.questions[room.current];
     const option = payload ? payload.option : -1;
@@ -176,12 +178,10 @@ io.on('connection', (socket) => {
 
     io.to(room.hostId).emit('host:answered', {
       answered: Object.keys(room.answers).length,
-      total: Object.keys(room.players).length,
+      total: room.participants.length,
     });
 
-    if (
-      Object.keys(room.answers).length >= Object.keys(room.players).length
-    ) {
+    if (Object.keys(room.answers).length >= room.participants.length) {
       clearTimeout(room.timer);
       reveal(room);
     }
@@ -220,6 +220,7 @@ function nextQuestion(room) {
   room.questionStart = Date.now();
   room.answers = {};
   Object.values(room.players).forEach((p) => (p.answered = false));
+  room.participants = Object.keys(room.players); // ai co mat khi cau bat dau
   const time = q.time || 20;
 
   // Gui cho TAT CA (khong kem dap an dung)
@@ -232,7 +233,7 @@ function nextQuestion(room) {
   });
   io.to(room.hostId).emit('host:answered', {
     answered: 0,
-    total: Object.keys(room.players).length,
+    total: room.participants.length,
   });
 
   room.timer = setTimeout(() => reveal(room), time * 1000 + 400);
@@ -256,7 +257,10 @@ function reveal(room) {
     isLast,
   });
 
-  Object.entries(room.players).forEach(([id, p]) => {
+  const participants = room.participants || Object.keys(room.players);
+  participants.forEach((id) => {
+    const p = room.players[id];
+    if (!p) return; // da roi mang
     const a = room.answers[id];
     io.to(id).emit('player:result', {
       correct: a ? a.correct : false,
