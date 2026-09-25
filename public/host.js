@@ -15,6 +15,7 @@ const V = {
   question: document.getElementById('questionView'),
   reveal: document.getElementById('revealView'),
   end: document.getElementById('endView'),
+  history: document.getElementById('historyView'),
 };
 function show(name) {
   Object.values(V).forEach((v) => v.classList.add('hidden'));
@@ -359,6 +360,7 @@ socket.on('game:question', (q) => {
   currentTime = q.time;
   startTimer(q.time);
   setMusic('question', 0.22);
+  setAdvance('question', 'Hiện đáp án');
   show('question');
 });
 
@@ -380,7 +382,28 @@ socket.on('host:answered', (d) => {
   document.getElementById('answeredTotal').textContent = d.total;
 });
 
-document.getElementById('revealBtn').addEventListener('click', () => socket.emit('host:reveal'));
+// ---- Dieu khien tien do: nut goc phai tren + phim tat (dung duoc but chieu) ----
+let gamePhase = null; // 'question' | 'reveal' | null
+const advanceBtn = document.getElementById('advanceBtn');
+function setAdvance(phase, label) {
+  gamePhase = phase;
+  if (phase) { advanceBtn.textContent = label; advanceBtn.classList.remove('hidden'); }
+  else { advanceBtn.classList.add('hidden'); }
+}
+function doAdvance() {
+  if (gamePhase === 'question') socket.emit('host:reveal');
+  else if (gamePhase === 'reveal') socket.emit('host:next');
+}
+advanceBtn.addEventListener('click', doAdvance);
+document.addEventListener('keydown', (e) => {
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return; // dang go -> bo qua
+  if (!gamePhase) return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    doAdvance();
+  }
+});
 
 // ================= REVEAL =================
 socket.on('game:reveal', (d) => {
@@ -406,12 +429,11 @@ socket.on('game:reveal', (d) => {
   });
 
   renderBoard('miniBoard', d.leaderboard);
-  const nextBtn = document.getElementById('nextBtn');
-  nextBtn.textContent = d.isLast ? 'Xem kết quả cuối' : 'Câu tiếp theo';
+  setAdvance('reveal', d.isLast ? 'Xem kết quả cuối →' : 'Câu tiếp theo →');
   show('reveal');
 });
 
-document.getElementById('nextBtn').addEventListener('click', () => socket.emit('host:next'));
+
 
 function renderBoard(id, board, showCorrect) {
   const el = document.getElementById(id);
@@ -480,6 +502,16 @@ socket.on('game:end', (d) => {
   lastResults = d.leaderboard || [];
   const board = lastResults;
   document.getElementById('pinBadge').style.display = 'none';
+  setAdvance(null);
+
+  // Tu dong luu ket qua tran nay vao lich su (de hom sau van con)
+  addToHistory({
+    ts: Date.now(),
+    pin: (serverInfo && serverInfo.pin) || '',
+    totalQ: (serverInfo && serverInfo.count) || questions.length || '',
+    count: board.length,
+    results: board.map((p) => ({ name: p.name, score: p.score, correct: p.correct })),
+  });
 
   // Reset buc ve trang thai ban dau (de chay lai co the hien lai hieu ung)
   document.querySelectorAll('.pcol').forEach((c) => {
@@ -498,38 +530,84 @@ socket.on('game:end', (d) => {
   Music.play('win', { loop: true, volume: 0.5 });
 
   // Hien lan luot, moi giai cach nhau 5 giay
-  setTimeout(() => revealPodium(3, board[2], 110, false), 5000);   // Giai Ba: 5s sau khi ket thuc
-  setTimeout(() => revealPodium(2, board[1], 160, false), 10000);  // Giai Nhi: 5s sau giai Ba
-  setTimeout(() => revealPodium(1, board[0], 215, true), 15000);   // Giai Nhat: 5s sau giai Nhi
-  setTimeout(() => { document.getElementById('endExtra').style.opacity = '1'; }, 18500);
+  setTimeout(() => revealPodium(3, board[2], 110, false), 2000);   // Giai Ba: ~2s sau khi ket thuc
+  setTimeout(() => revealPodium(2, board[1], 160, false), 4000);   // Giai Nhi: 2s sau giai Ba
+  setTimeout(() => revealPodium(1, board[0], 215, true), 6000);    // Giai Nhat: 2s sau giai Nhi
+  setTimeout(() => { document.getElementById('endExtra').style.opacity = '1'; }, 9500);
 });
 
 // ---- Xuat ket qua ra Excel ----
-document.getElementById('exportXlsxBtn').addEventListener('click', () => {
-  if (!lastResults.length) return alert('Chưa có kết quả để tải.');
+// ---- Xuat ket qua ra Excel (dung chung cho man cuoi va lich su) ----
+function exportResultsXlsx(results, totalQ, whenTs) {
+  if (!results || !results.length) return alert('Chưa có kết quả để tải.');
   if (typeof XLSX === 'undefined') return alert('Không tải được thư viện Excel.');
-  const totalQ = (serverInfo && serverInfo.count) || questions.length || '';
-  const now = new Date();
+  const now = whenTs ? new Date(whenTs) : new Date();
   const pad = (n) => String(n).padStart(2, '0');
   const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
-
   const rows = [
     ['KẾT QUẢ ÔN TẬP - THAHOOK'],
     ['Thời gian:', stamp, '', 'Tổng số câu:', totalQ],
     [],
     ['Hạng', 'Tên sinh viên', 'Số câu đúng', 'Tổng số câu', 'Điểm'],
   ];
-  lastResults.forEach((p, i) =>
+  results.forEach((p, i) =>
     rows.push([i + 1, p.name, p.correct != null ? p.correct : '', totalQ, p.score])
   );
-
   const ws = XLSX.utils.aoa_to_sheet(rows);
   ws['!cols'] = [{ wch: 6 }, { wch: 28 }, { wch: 12 }, { wch: 12 }, { wch: 10 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Ket qua');
   const fname = `KetQua_${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}.xlsx`;
   XLSX.writeFile(wb, fname);
+}
+
+document.getElementById('exportXlsxBtn').addEventListener('click', () => {
+  exportResultsXlsx(lastResults, (serverInfo && serverInfo.count) || questions.length || '', Date.now());
 });
+
+// ---- Lich su ket qua: tu dong luu vao trinh duyet may giao vien ----
+const HIST_KEY = 'thahook_history';
+const HIST_MAX = 60;
+function getHistory() {
+  try { return JSON.parse(localStorage.getItem(HIST_KEY)) || []; } catch (e) { return []; }
+}
+function addToHistory(record) {
+  try {
+    const h = getHistory();
+    h.unshift(record);
+    if (h.length > HIST_MAX) h.length = HIST_MAX;
+    localStorage.setItem(HIST_KEY, JSON.stringify(h));
+  } catch (e) { /* localStorage khong dung duoc -> bo qua, van con nut tai Excel */ }
+}
+
+document.getElementById('historyBtn').addEventListener('click', () => { renderHistory(); show('history'); });
+document.getElementById('histBack').addEventListener('click', () => show('setup'));
+document.getElementById('histClear').addEventListener('click', () => {
+  if (!confirm('Xóa toàn bộ lịch sử kết quả đã lưu trên máy này?')) return;
+  try { localStorage.removeItem(HIST_KEY); } catch (e) {}
+  renderHistory();
+});
+function renderHistory() {
+  const h = getHistory();
+  const el = document.getElementById('histList');
+  if (!h.length) {
+    el.innerHTML = '<p style="color:#666">Chưa có kết quả nào được lưu. Kết quả sẽ tự động lưu sau mỗi lần chơi xong.</p>';
+    return;
+  }
+  el.innerHTML = h.map((r, i) => {
+    const when = new Date(r.ts).toLocaleString('vi-VN');
+    return `<div class="qitem" style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <div><b>${when}</b><br><span style="color:#666;font-size:14px">PIN ${r.pin || '—'} · ${r.count} người chơi · ${r.totalQ} câu</span></div>
+      <button class="hist-dl" data-i="${i}" style="background:#0d3b8c;color:#fff;border:none;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:700">Tải Excel</button>
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.hist-dl').forEach((b) =>
+    b.addEventListener('click', () => {
+      const r = getHistory()[Number(b.dataset.i)];
+      if (r) exportResultsXlsx(r.results, r.totalQ, r.ts);
+    })
+  );
+}
 
 document.getElementById('againBtn').addEventListener('click', () => location.reload());
 
