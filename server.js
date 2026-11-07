@@ -10,11 +10,21 @@ const http = require('http');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const crypto = require('crypto');
 const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+
+// Cau hinh chiu tai tot (~250 nguoi) va it bi rot mang:
+// - pingTimeout 60s: mang yeu im lang toi 60 giay van KHONG bi coi la mat ket noi
+// - maxHttpBufferSize nho goc: goi tin nhe
+const io = new Server(server, {
+  cors: { origin: '*' },
+  pingInterval: 25000,
+  pingTimeout: 60000,
+  maxHttpBufferSize: 1e6,
+});
 
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -34,6 +44,7 @@ try {
 
 // ---- Trang thai cac phong ----
 const rooms = {}; // pin -> room object
+const HOST_GRACE_MS = 2 * 60 * 1000; // giu phong 2 phut khi giao vien rot mang
 
 function genPin() {
   let pin;
@@ -42,15 +53,29 @@ function genPin() {
   } while (rooms[pin]);
   return pin;
 }
+function genToken() {
+  return crypto.randomBytes(9).toString('hex');
+}
 
 function playerList(room) {
   return Object.values(room.players).map((p) => p.name);
 }
 
+// Bang xep hang: GOM ca nguoi dang online VA nguoi da roi mang (giu diem)
 function leaderboard(room) {
-  return Object.values(room.players)
-    .map((p) => ({ name: p.name, score: p.score, correct: p.correct }))
-    .sort((a, b) => b.score - a.score);
+  const list = [];
+  const activeKeys = new Set();
+  for (const p of Object.values(room.players)) {
+    list.push({ name: p.name, score: p.score, correct: p.correct });
+    activeKeys.add(p.nameKey);
+  }
+  for (const k in room.parked) {
+    if (!activeKeys.has(k)) {
+      const pk = room.parked[k];
+      list.push({ name: pk.name, score: pk.score, correct: pk.correct });
+    }
+  }
+  return list.sort((a, b) => b.score - a.score);
 }
 
 function localIPs() {
@@ -74,27 +99,49 @@ io.on('connection', (socket) => {
       payload && Array.isArray(payload.questions) && payload.questions.length
         ? payload.questions
         : defaultQuestions;
+    const hostToken = genToken();
 
     rooms[pin] = {
       pin,
       hostId: socket.id,
-      players: {}, // socketId -> {name, score, answered}
+      hostToken,
+      players: {}, // socketId -> {name, nameKey, score, correct, answered, token}
+      parked: {},  // nameKey -> {name, score, correct, token}  (nguoi da roi mang)
       questions,
       state: 'lobby', // lobby | question | reveal | ended
       current: -1,
       questionStart: 0,
       answers: {}, // socketId -> {option, correct, gained}
+      participants: [],
       timer: null,
+      hostGone: null,
     };
     socket.join(pin);
     socket.data.pin = pin;
     socket.data.role = 'host';
-    if (cb) cb({ ok: true, pin, count: questions.length, ips: localIPs(), port: PORT });
+    if (cb) cb({ ok: true, pin, hostToken, count: questions.length, ips: localIPs(), port: PORT });
   });
 
-  // ===== SINH VIEN: tham gia =====
+  // ===== GIAO VIEN: vao lai sau khi rot mang (giu nguyen phong) =====
+  socket.on('host:reclaim', (payload, cb) => {
+    const { pin, hostToken } = payload || {};
+    const room = rooms[pin];
+    if (!room || room.hostToken !== hostToken) return cb && cb({ ok: false });
+    if (room.hostGone) { clearTimeout(room.hostGone); room.hostGone = null; }
+    room.hostId = socket.id;
+    socket.join(pin);
+    socket.data.pin = pin;
+    socket.data.role = 'host';
+    if (cb) cb({ ok: true, state: room.state });
+    io.to(room.hostId).emit('host:players', {
+      count: Object.keys(room.players).length,
+      players: playerList(room),
+    });
+  });
+
+  // ===== SINH VIEN: tham gia (hoac vao lai, giu diem) =====
   socket.on('player:join', (payload, cb) => {
-    const { pin, name } = payload || {};
+    const { pin, name, token } = payload || {};
     const room = rooms[pin];
     if (!room) return cb && cb({ ok: false, error: 'Ma PIN khong ton tai.' });
     if (room.state === 'ended')
@@ -102,19 +149,41 @@ io.on('connection', (socket) => {
 
     const cleanName = String(name || '').trim().slice(0, 20);
     if (!cleanName) return cb && cb({ ok: false, error: 'Vui long nhap ten.' });
+    const nameKey = cleanName.toLowerCase();
 
-    const taken = Object.values(room.players).some(
-      (p) => p.name.toLowerCase() === cleanName.toLowerCase()
-    );
-    if (taken)
-      return cb && cb({ ok: false, error: 'Ten da co nguoi dung, chon ten khac.' });
+    // Tim ban ghi cu de KHOI PHUC: uu tien theo token, roi theo ten
+    let parkedKey = null;
+    if (token) {
+      for (const k in room.parked) {
+        if (room.parked[k].token === token) { parkedKey = k; break; }
+      }
+    }
+    if (parkedKey === null && room.parked[nameKey]) parkedKey = nameKey;
 
-    room.players[socket.id] = { name: cleanName, score: 0, correct: 0, answered: false };
+    // Co nguoi ONLINE khac dang dung ten nay -> tu choi (tranh 2 nguoi trung ten)
+    const nameOnline = Object.values(room.players).some((p) => p.nameKey === nameKey);
+    if (nameOnline) {
+      return cb && cb({ ok: false, error: 'Ten dang duoc dung, chon ten khac.' });
+    }
+
+    let score = 0, correct = 0, pToken = genToken();
+    if (parkedKey !== null) {
+      const pk = room.parked[parkedKey];
+      score = pk.score; correct = pk.correct; pToken = pk.token || pToken;
+      delete room.parked[parkedKey];
+    }
+
+    room.players[socket.id] = {
+      name: cleanName, nameKey, score, correct, answered: false, token: pToken,
+    };
     socket.join(pin);
     socket.data.pin = pin;
     socket.data.role = 'player';
-    // Vao giua chung (khi tro choi dang dien ra) -> cho tu cau hoi ke tiep
-    if (cb) cb({ ok: true, name: cleanName, inProgress: room.state !== 'lobby' });
+    if (cb) cb({
+      ok: true, name: cleanName, token: pToken,
+      restored: parkedKey !== null, score,
+      inProgress: room.state !== 'lobby',
+    });
 
     io.to(room.hostId).emit('host:players', {
       count: Object.keys(room.players).length,
@@ -134,11 +203,11 @@ io.on('connection', (socket) => {
   socket.on('host:next', () => {
     const room = rooms[socket.data.pin];
     if (!room || room.hostId !== socket.id) return;
-    if (room.state === 'question') return; // dang trong cau hoi, bo qua
+    if (room.state === 'question') return;
     nextQuestion(room);
   });
 
-  // ===== GIAO VIEN: dung/ket thuc som cau hoi =====
+  // ===== GIAO VIEN: hien dap an ngay =====
   socket.on('host:reveal', () => {
     const room = rooms[socket.data.pin];
     if (!room || room.hostId !== socket.id) return;
@@ -153,7 +222,7 @@ io.on('connection', (socket) => {
     if (!room || room.state !== 'question') return;
     const player = room.players[socket.id];
     if (!player || player.answered) return;
-    if (!room.participants || room.participants.indexOf(socket.id) < 0) return; // nguoi vao muon: doi cau sau
+    if (!room.participants || room.participants.indexOf(socket.id) < 0) return; // vao muon: cho cau sau
 
     const q = room.questions[room.current];
     const option = payload ? payload.option : -1;
@@ -164,11 +233,8 @@ io.on('connection', (socket) => {
     const correct = option === q.answer;
     let gained = 0;
     if (correct) {
-      // Dung luon duoc 1000 diem => tra loi dung NHIEU cau luon thang.
-      // Diem toc do rat nho (tong toi da < 1000 ca van) => chi de PHAN HANG
-      // giua nhung nguoi bang so cau dung.
       const totalQ = room.questions.length || 1;
-      const frac = Math.max(0, 1 - elapsed / timeLimit); // 1 = nhanh nhat, 0 = sat gio
+      const frac = Math.max(0, 1 - elapsed / timeLimit);
       const speedBonus = Math.round((999 / totalQ) * frac);
       gained = 1000 + speedBonus;
       player.correct += 1;
@@ -191,18 +257,37 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const room = rooms[socket.data.pin];
     if (!room) return;
-    if (socket.data.role === 'host') {
-      io.to(room.pin).emit('game:aborted');
-      clearTimeout(room.timer);
-      delete rooms[room.pin];
+
+    if (socket.data.role === 'host' && room.hostId === socket.id) {
+      // KHONG xoa phong ngay -> cho giao vien vao lai trong HOST_GRACE_MS
+      if (room.hostGone) clearTimeout(room.hostGone);
+      room.hostGone = setTimeout(() => {
+        io.to(room.pin).emit('game:aborted');
+        clearTimeout(room.timer);
+        delete rooms[room.pin];
+      }, HOST_GRACE_MS);
     } else if (socket.data.role === 'player') {
-      delete room.players[socket.id];
+      const p = room.players[socket.id];
+      if (p) {
+        // GIU DIEM vao "parked" de vao lai (dung ten/token) la khoi phuc
+        room.parked[p.nameKey] = { name: p.name, score: p.score, correct: p.correct, token: p.token };
+        delete room.players[socket.id];
+      }
       delete room.answers[socket.id];
+      const pi = room.participants.indexOf(socket.id);
+      if (pi >= 0) room.participants.splice(pi, 1);
+
       if (rooms[room.pin]) {
         io.to(room.hostId).emit('host:players', {
           count: Object.keys(room.players).length,
           players: playerList(room),
         });
+        // Neu tat ca nguoi con lai da tra loi -> hien dap an som
+        if (room.state === 'question' && room.participants.length > 0 &&
+            Object.keys(room.answers).length >= room.participants.length) {
+          clearTimeout(room.timer);
+          reveal(room);
+        }
       }
     }
   });
@@ -223,7 +308,6 @@ function nextQuestion(room) {
   room.participants = Object.keys(room.players); // ai co mat khi cau bat dau
   const time = q.time || 20;
 
-  // Gui cho TAT CA (khong kem dap an dung)
   io.to(room.pin).emit('game:question', {
     index: room.current,
     total: room.questions.length,

@@ -5,6 +5,7 @@ const LETTERS = ['A', 'B', 'C', 'D'];
 
 let questions = []; // ngan hang cau hoi (do giao vien soan)
 let serverInfo = null; // {pin, ips, port}
+let hostToken = null, hostPin = null; // de vao lai phong khi giao vien rot mang
 let currentTime = 20;
 let timerId = null;
 
@@ -310,6 +311,8 @@ document.getElementById('createBtn').addEventListener('click', () => {
   socket.emit('host:create', { questions }, (res) => {
     if (!res || !res.ok) return alert('Không tạo được phòng.');
     serverInfo = res;
+    hostToken = res.hostToken;
+    hostPin = res.pin;
     setupLobby(res);
     show('lobby');
   });
@@ -611,8 +614,15 @@ function renderHistory() {
 
 document.getElementById('againBtn').addEventListener('click', () => location.reload());
 
+// Giao vien vao lai phong khi ket noi lai (rot mang ngan) -> giu nguyen tro choi
+socket.on('connect', () => {
+  if (hostToken && hostPin) {
+    socket.emit('host:reclaim', { pin: hostPin, hostToken }, () => {});
+  }
+});
+
 socket.on('disconnect', () => {
-  // May chu tat: quay ve setup o lan tuong tac sau
+  // Mang chap chon: tu dong ket noi lai; phong duoc giu trong 2 phut.
 });
 
 // Khoi tao: tai san bo cau hoi mau cho tien

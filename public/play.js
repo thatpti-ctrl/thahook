@@ -16,14 +16,48 @@ function show(name) {
 let myName = '';
 let currentQIndex = -1;
 
-// Tu dien PIN neu co ?pin= tren URL (huu ich khi quet QR)
+// Luu phien de VAO LAI giu diem khi rot mang / tai lai trang
+const SKEY = 'thahook_sess';
+let sess = null; // {pin, name, token}
+function loadSess() {
+  if (sess) return sess;
+  try { sess = JSON.parse(sessionStorage.getItem(SKEY)); } catch (e) {}
+  return sess;
+}
+function saveSess(s) { sess = s; try { sessionStorage.setItem(SKEY, JSON.stringify(s)); } catch (e) {} }
+function clearSess() { sess = null; try { sessionStorage.removeItem(SKEY); } catch (e) {} }
+
 const params = new URLSearchParams(location.search);
-if (params.get('pin')) document.getElementById('pinInput').value = params.get('pin');
+(function prefill() {
+  const s = loadSess();
+  if (s && s.pin) document.getElementById('pinInput').value = s.pin;
+  if (params.get('pin')) document.getElementById('pinInput').value = params.get('pin');
+  if (s && s.name) document.getElementById('nameInput').value = s.name;
+})();
 
 document.getElementById('joinBtn').addEventListener('click', join);
 document.getElementById('nameInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') join();
 });
+
+function doJoin(pin, name, token, isAuto) {
+  const err = document.getElementById('joinErr');
+  socket.emit('player:join', { pin, name, token }, (res) => {
+    if (!res || !res.ok) {
+      if (!isAuto) err.textContent = (res && res.error) || 'Không vào được phòng.';
+      else clearSess(); // tu dong vao lai that bai -> xoa phien cu
+      return;
+    }
+    myName = res.name;
+    saveSess({ pin, name: res.name, token: res.token });
+    document.getElementById('myName').textContent = myName;
+    document.getElementById('lobbyMsg').textContent = res.inProgress
+      ? (res.restored ? 'Đã kết nối lại — chờ câu hỏi tiếp theo…' : 'Trò chơi đang diễn ra — chờ câu hỏi tiếp theo…')
+      : 'Đang chờ giáo viên bắt đầu…';
+    if (!isAuto) SFX.join();
+    show('lobby');
+  });
+}
 
 function join() {
   const pin = document.getElementById('pinInput').value.trim();
@@ -35,20 +69,17 @@ function join() {
     return;
   }
   SFX.init(); // kich hoat am thanh (thao tac cham cua nguoi dung)
-  socket.emit('player:join', { pin, name }, (res) => {
-    if (!res.ok) {
-      err.textContent = res.error || 'Không vào được phòng.';
-      return;
-    }
-    myName = res.name;
-    document.getElementById('myName').textContent = myName;
-    document.getElementById('lobbyMsg').textContent = res.inProgress
-      ? 'Trò chơi đang diễn ra — chờ câu hỏi tiếp theo…'
-      : 'Đang chờ giáo viên bắt đầu…';
-    SFX.join();
-    show('lobby');
-  });
+  const s = loadSess();
+  const tok = (s && s.name && s.name.toLowerCase() === name.toLowerCase()) ? s.token : undefined;
+  doJoin(pin, name, tok, false);
 }
+
+// Tu dong vao lai khi ket noi lai (rot mang) hoac tai lai trang giua chung
+socket.on('connect', () => {
+  const e = document.getElementById('joinErr'); if (e) e.textContent = '';
+  const s = loadSess();
+  if (s && s.pin && s.name) doJoin(s.pin, s.name, s.token, true);
+});
 
 // Nut tat/bat tieng
 document.getElementById('pMute').addEventListener('click', () => {
@@ -100,6 +131,7 @@ socket.on('player:result', (r) => {
 });
 
 socket.on('game:end', () => {
+  clearSess();
   SFX.win();
   show('end');
 });
@@ -111,11 +143,12 @@ socket.on('game:end', () => {
 });
 
 socket.on('game:aborted', () => {
+  clearSess();
   alert('Giáo viên đã kết thúc phiên chơi.');
   location.reload();
 });
 
 socket.on('disconnect', () => {
   const err = document.getElementById('joinErr');
-  if (err) err.textContent = 'Mất kết nối tới máy chủ.';
+  if (err) err.textContent = '⚠ Mất kết nối — đang thử kết nối lại…';
 });
